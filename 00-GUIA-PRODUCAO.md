@@ -32,6 +32,7 @@ pré-requisito para a nota processar.
 | 1 | `01-view-parceiros-xml.sql` | A view. Roda no banco |
 | 2 | `02-cadastrar-parceiros-view.js` | O botão. Cola numa ação de tela |
 | 3 | `03-verificacao.sql` | Queries de conferência |
+| 4 | `04-funcao-limpa-divergencia.sql` | Função que apaga a mensagem antiga. Roda no banco |
 
 ---
 
@@ -181,6 +182,115 @@ Filtro de Período **não precisa de expressão SQL** — o Sankhya monta sozinh
 
 ---
 
+## PARTE 1.5 — A função de limpeza (opcional)
+
+A mensagem de divergência fica gravada na coluna `CONFIG` da `TGFIXN` desde o momento do
+upload, e **não é reavaliada**. Cadastrar o parceiro faz a nota processar, mas o texto
+continua aparecendo no Portal.
+
+A função `STP_LIMPA_DIVERG_PARC` remove esse bloco. O botão a chama depois de cadastrar.
+
+### Criar
+
+No banco, rode `04-funcao-limpa-divergencia.sql`.
+
+```sql
+SELECT OBJECT_NAME, OBJECT_TYPE, STATUS FROM USER_OBJECTS
+WHERE OBJECT_NAME = 'STP_LIMPA_DIVERG_PARC'
+```
+
+Tem que vir `FUNCTION` e `VALID`. Se vier `INVALID`:
+
+```sql
+SELECT LINE, POSITION, TEXT FROM USER_ERRORS
+WHERE NAME = 'STP_LIMPA_DIVERG_PARC' ORDER BY SEQUENCE
+```
+
+### Testar isolada, antes de ligar no botão
+
+```sql
+-- antes
+SELECT NUARQUIVO, TO_CHAR(SUBSTR(CONFIG, 1, 600)) AS CONFIG_TXT
+FROM TGFIXN WHERE STATUS = 0 AND INSTR(CONFIG, '03846853747') > 0;
+
+-- limpa
+SELECT STP_LIMPA_DIVERG_PARC('03846853747') AS NOTAS_LIMPAS FROM DUAL;
+
+-- depois
+SELECT NUARQUIVO, TO_CHAR(SUBSTR(CONFIG, 1, 600)) AS CONFIG_TXT
+FROM TGFIXN WHERE NUARQUIVO IN (/* os da primeira consulta */);
+```
+
+Trocando o CPF por um que tenha divergência na sua base.
+
+### Por que é função, e não UPDATE no script
+
+Não existe `UPDATE` via script de ação nesta instalação. Função pode ser chamada de dentro
+de um `SELECT` — e `SELECT` o script faz. O `PRAGMA AUTONOMOUS_TRANSACTION` permite o
+`COMMIT` sem interferir na transação do script.
+
+### O que ela remove
+
+**Apenas a frase** "Não foi encontrado qualquer parceiro cliente ativo com o CNPJ/CPF X".
+
+Isso importa porque o mesmo bloco `<divDevolucao>` pode conter **outras validações**. Caso
+real da nota 109154:
+
+```
+Tipo de Operação não informado em Outras Opções > Preferências...
+Não foi encontrado qualquer parceiro cliente ativo com o CNPJ/CPF X.
+```
+
+Apagar o bloco inteiro levaria junto o aviso de Tipo de Operação, que é outro problema e
+continua sem solução.
+
+Quando a frase do parceiro é a **única** validação, a coluna fica completamente vazia. O
+cabeçalho `XML: nome-do-arquivo.xml` não conta como conteúdo — sem a frase ele fica órfão
+e não diz nada.
+
+Validado contra os quatro formatos que existem na base:
+
+| Situação | Resultado |
+|---|---|
+| Só a frase do parceiro | `CONFIG` vira `NULL` |
+| Idem, com chave em vez de `.xml` no cabeçalho | `CONFIG` vira `NULL` |
+| Duas validações, multilinha | mantém a outra |
+| Duas validações em linha única (formato de 2023) | mantém a outra |
+
+A limpeza é **por documento**, não por nota: a view agrupa, e um cliente pode ter várias
+notas pendentes com a mesma mensagem.
+
+### Quando o botão chama
+
+Só depois de **confirmar no banco** que o parceiro foi criado e satisfaz o que o motor
+exige (`CLIENTE = 'S'` e `ATIVO = 'S'`). O `save()` ter passado não basta: apagar a
+divergência de um parceiro inexistente esconderia um problema real.
+
+Não limpa quando o parceiro **já existia** — nesse caso o botão não fez nada, e a
+mensagem não é dele para apagar.
+
+⚠️ `CONFIG` é coluna do motor de importação. Se não quiser mexer nela, deixe
+`LIMPAR_DIVERG = false` no script — o cadastro funciona igual, só a mensagem antiga
+permanece.
+
+⚠️ Se a função não existir no banco, a chamada falha **em silêncio** e o cadastro segue
+normalmente. Foi o comportamento observado antes de criá-la: o parceiro nascia certo, mas
+a linha "DIVERGENCIAS LIMPAS" não aparecia no resumo.
+
+⚠️ **Antes de usar em produção**, vale confirmar se o problema existe lá:
+
+```sql
+SELECT COUNT(*) AS PROCESSADAS_COM_DIVERGENCIA
+FROM TGFIXN
+WHERE STATUS = 5
+  AND UPPER(TO_CHAR(SUBSTR(CONFIG, 1, 4000))) LIKE '%NAO FOI ENCONTRADO%'
+```
+
+Se der **zero**, o motor reescreve o `CONFIG` ao processar com sucesso — e a função é
+desnecessária.
+
+---
+
 ## PARTE 2 — O botão
 
 ### 2.1 Criar a ação
@@ -211,6 +321,7 @@ No topo do arquivo:
 | `MAX_LINHAS` | `10` | teto por clique |
 | `CODBAI_CENTRO` | `866` | CODBAI genérico para "CENTRO" |
 | `NAO_CADASTRAR` | 3 raízes | BeBaby, Amazon, EBAZAR |
+| `LIMPAR_DIVERG` | `true` | apaga a mensagem antiga. Requer a função da Parte 1.5 |
 
 ⚠️ **Confirme o `CODBAI_CENTRO` em produção.** O 866 foi definido em homologação:
 
@@ -347,6 +458,11 @@ mensagem, e as colunas se atualizam ao recarregar a grade.
 - [ ] "Reiniciar esta unidade de dados"
 - [ ] Lançador criado, ordem dos campos definida
 - [ ] Painel de filtros configurado
+
+**Função de limpeza (se for usar)**
+- [ ] `STP_LIMPA_DIVERG_PARC` criada e `VALID`
+- [ ] Testada isolada, com um documento real
+- [ ] Confirmado que a divergência sobrevive ao processamento nesta base
 
 **Botão**
 - [ ] `CODBAI_CENTRO` confirmado em produção
