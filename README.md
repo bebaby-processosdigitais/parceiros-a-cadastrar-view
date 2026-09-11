@@ -46,6 +46,7 @@ O endereço é resolvido em três níveis: cache local (`TSICEP`) → ViaCEP →
 | 1 | `01-view-parceiros-xml.sql` | A view. Roda no banco |
 | 2 | `02-cadastrar-parceiros-view.js` | O botão. Cola numa ação de tela |
 | 3 | `03-verificacao.sql` | Queries de conferência |
+| 4 | `04-funcao-limpa-divergencia.sql` | Função que apaga a mensagem de divergência antiga |
 
 ---
 
@@ -107,8 +108,12 @@ CTEs. Sem eles o Oracle reavalia a extração do XML uma vez por coluna agregada
 
 - A view cobre os últimos **90 dias**, só `STATUS = 0` — é ajuste de desempenho
 - CEP geral de município não tem logradouro; o parceiro nasce só com a cidade
-- A mensagem de divergência fica gravada na coluna `CONFIG` da `TGFIXN` e **não se apaga
-  sozinha** ao cadastrar o parceiro — embora a nota passe a processar
+- A mensagem de divergência fica gravada na coluna `CONFIG` da `TGFIXN` e não se apaga
+  sozinha. A função `STP_LIMPA_DIVERG_PARC` (arquivo `04`) resolve: o botão a chama depois
+  de confirmar o cadastro. Ela remove só a frase do parceiro — o mesmo bloco pode conter
+  outras validações
+- Nota importada por robô não tem `CONFIG` preenchido: a divergência só é gravada quando o
+  XML sobe pela tela do Portal
 - View é somente leitura: o resultado vem pela mensagem, não gravado na linha
 
 ---
