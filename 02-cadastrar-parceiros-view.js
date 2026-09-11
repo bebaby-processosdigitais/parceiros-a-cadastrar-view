@@ -52,6 +52,15 @@
 
 // ========================================================== INTERRUPTORES
 var MODO_SIMULACAO  = true;    // true = so relata, NAO grava
+var LIMPAR_DIVERG   = true;    // apos CADASTRAR com sucesso, remove do
+                               // TGFIXN.CONFIG a
+                               // mensagem "nao foi encontrado qualquer
+                               // parceiro cliente ativo".
+                               // REQUER a funcao STP_LIMPA_DIVERG_PARC
+                               // criada no banco -- ver o arquivo
+                               // 04-funcao-limpa-divergencia.sql.
+                               // Se a funcao nao existir, a chamada falha
+                               // em silencio e o cadastro segue normal.
 // Endereco em tres niveis, do mais confiavel ao menos:
 //   1. TSICEP  -- codigos ja vinculados entre si. Risco zero.
 //   2. ViaCEP  -- devolve NOMES; criamos logradouro e bairro, e gravamos
@@ -211,6 +220,46 @@ function normaliza(txt) {
     limpo = limpo.replace(/^\s+|\s+$/g, "");
 
     return (limpo === "") ? null : limpo;
+}
+
+// Confirma no banco que o parceiro existe e satisfaz o que o motor exige:
+// "parceiro CLIENTE ATIVO". So depois disso vale limpar a divergencia.
+function parceiroConfirmado(documento) {
+    if (documento == null) return false;
+    try {
+        var q = getQuery("native");
+        q.setParam("d", String(documento));
+        q.nativeSelect("SELECT COUNT(*) AS QTD FROM TGFPAR "
+            + "WHERE CGC_CPF = {d} AND CLIENTE = 'S' AND ATIVO = 'S'");
+        if (q.next()) return Number(q.getString("QTD")) > 0;
+    } catch (e) { }
+    return false;
+}
+
+// Remove a mensagem de divergencia de parceiro do TGFIXN.CONFIG.
+//
+// Nao existe UPDATE via script nesta instalacao, entao a limpeza mora
+// numa FUNCAO no banco -- funcao pode ser chamada de dentro de um SELECT.
+// Ver 04-funcao-limpa-divergencia.sql.
+//
+// A limpeza e por DOCUMENTO, nao por nota: a view agrupa, e um cliente
+// pode ter varias notas pendentes carregando a mesma mensagem.
+//
+// Devolve quantas notas foram limpas, ou -1 em erro. Falhar aqui nao
+// afeta o cadastro -- a mensagem e ruido visual, o parceiro e o que
+// importa.
+function limpaDivergencia(documento) {
+    if (!LIMPAR_DIVERG || documento == null) return 0;
+    try {
+        var q = getQuery("native");
+        q.setParam("doc", String(documento));
+        q.nativeSelect("SELECT STP_LIMPA_DIVERG_PARC({doc}) AS QTD FROM DUAL");
+        if (q.next()) {
+            var n = Number(q.getString("QTD"));
+            return (n > 0) ? n : 0;
+        }
+    } catch (e) { }
+    return 0;
 }
 
 // Esta na lista de exclusao? Compara pela RAIZ (8 primeiros digitos),
@@ -585,6 +634,7 @@ if (alvos.length === 0) {
 
 // ============================================================ ETAPA 2
 var jaTinha = 0, criados = 0, comEnd = 0, semCidade = 0, semEndereco = 0;
+var ignorados = 0, limpasTotal = 0;
 var falhas = 0, logFalhou = 0;
 var listaOk = "", listaSemEnd = "", listaIgnor = "", listaErro = "", avisos = "";
 
@@ -723,6 +773,14 @@ for (var a = 0; a < alvos.length; a++) {
             }
         }
 
+        // Limpa a divergencia SO depois de confirmar que o parceiro esta
+        // gravado E serve ao motor (CLIENTE='S' e ATIVO='S').
+        // Nao basta o save() ter passado: se ele falhasse em silencio,
+        // estariamos apagando a mensagem de um parceiro inexistente.
+        if (parceiroConfirmado(d.doc)) {
+            limpasTotal += limpaDivergencia(d.doc);
+        }
+
         if (res.opcionaisFalhos !== "") {
             obs += " | Campos nao aceitos: " + res.opcionaisFalhos;
             if (avisos.length < 200) {
@@ -758,7 +816,10 @@ var texto = cab
     + "   (com endereco: " + comEnd + "  |  sem endereco: " + semEndereco + ")"
     + "\n  JA EXISTIAM: " + jaTinha
     + "\n  IGNORADOS POR REGRA: " + ignorados
-    + "\n  ERROS: " + falhas;
+    + "\n  ERROS: " + falhas
+    + (limpasTotal > 0
+       ? "\n  DIVERGENCIAS LIMPAS: " + limpasTotal + " nota(s)"
+       : "");
 
 if (listaOk !== "") {
     texto += "\n\nCOM ENDERECO COMPLETO:" + listaOk;
