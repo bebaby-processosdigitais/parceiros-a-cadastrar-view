@@ -5,6 +5,10 @@ descoberto, e o que não fazer.
 
 **Última atualização:** 11/09/2026
 
+**Estado:** ciclo completo validado em homologação. Notas processaram com o parceiro
+criado pelo botão (`NUNOTA 193189` e `193190`), e a limpeza da divergência foi testada
+contra os quatro formatos de mensagem que existem na base.
+
 ---
 
 ## 1. O problema
@@ -177,6 +181,15 @@ do XML.**
 `<validacoes><divDevolucao>`, desde o momento do upload. **Não é reavaliada** — cadastrar
 o parceiro não limpa o texto, embora a nota passe a processar.
 
+Resolvido com a função `STP_LIMPA_DIVERG_PARC` (arquivo `04`), que o botão chama depois de
+confirmar o cadastro. Ela remove **só a frase** do parceiro, não o bloco — porque o mesmo
+`<divDevolucao>` pode conter outras validações (a nota 109154 tem "Tipo de Operação não
+informado" junto).
+
+⚠️ Nota importada pelo **robô da Anymarket** não tem `CONFIG` preenchido — a divergência
+só é gravada quando o XML sobe pela tela do Portal, que é onde a validação roda. Por isso
+a view é mais confiável que o Portal para saber quem falta cadastrar.
+
 Pendente de confirmar em produção: se um processamento completo reescreve o `CONFIG`.
 
 **O Portal NÃO aceita ações de tela** (confirmado pelo Paulo). Por isso a funcionalidade
@@ -311,7 +324,7 @@ para achar.
 | # | Pendência | Com quem |
 |---|---|---|
 | 1 | Update de estrutura na homologação (4 colunas conhecidas faltando) | Paulo |
-| 2 | O `CONFIG` é reescrito quando a nota processa com sucesso? | verificável por SQL em produção |
+| 2 | O `CONFIG` é reescrito quando a nota processa com sucesso? | verificável por SQL em produção. Se sim, a função `04` é desnecessária lá |
 | 3 | Confirmar que o `CODBAI 866` é genérico em produção | query no `03-verificacao.sql` |
 | 4 | Testar contraparte pessoa jurídica de verdade | — |
 | 5 | Corrigir o `CODPARC 58783` (Amazon cadastrada por engano, em homologação) | — |
