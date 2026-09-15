@@ -57,7 +57,10 @@ Confira:
 
 - Retorna linhas, e nenhum `NUARQUIVO` repetido
 - `ORIGEM` mostra ML FULL e AMAZON FULL
-- Tempo aceitável (em homologação: ~1,5s para 138 linhas)
+- Tempo aceitável
+
+⚠️ **Se demorar**, é volume: a janela de dias é o que controla. Medições em produção com
+1.386 notas em 90 dias deram 63s; a versão entregue usa 2 dias.
 
 ⚠️ **Se demorar mais de 30 segundos**, confirme que os hints `/*+ MATERIALIZE */`
 estão presentes nas três CTEs. Sem eles a consulta leva 30s em vez de 1,5s — o Oracle
@@ -182,13 +185,19 @@ Filtro de Período **não precisa de expressão SQL** — o Sankhya monta sozinh
 
 ---
 
-## PARTE 1.5 — A função de limpeza (opcional)
+## PARTE 1.5 — A função de limpeza (OPCIONAL, vem desligada)
 
-A mensagem de divergência fica gravada na coluna `CONFIG` da `TGFIXN` desde o momento do
-upload, e **não é reavaliada**. Cadastrar o parceiro faz a nota processar, mas o texto
-continua aparecendo no Portal.
+⚠️ **Você provavelmente não precisa desta parte.** Confirmado em 12/09/2026: quando a nota
+processa, o motor reescreve o `CONFIG` e o aviso some sozinho. Por isso o script vem com
+`LIMPAR_DIVERG = false`.
 
-A função `STP_LIMPA_DIVERG_PARC` remove esse bloco. O botão a chama depois de cadastrar.
+A função continua aqui porque é útil em dois casos: limpar ruído acumulado de notas antigas
+que nunca vão processar, e diagnosticar. Se for esse o seu caso, siga adiante; senão, pule
+para a Parte 2.
+
+A mensagem de divergência fica gravada na coluna `CONFIG` da `TGFIXN` desde o upload, e não
+é reavaliada enquanto a nota não processa. A função `STP_LIMPA_DIVERG_PARC` remove a frase
+do parceiro. O botão a chama depois de cadastrar, **se o interruptor estiver ligado**.
 
 ### Criar
 
@@ -321,7 +330,7 @@ No topo do arquivo:
 | `MAX_LINHAS` | `10` | teto por clique |
 | `CODBAI_CENTRO` | `866` | CODBAI genérico para "CENTRO" |
 | `NAO_CADASTRAR` | 3 raízes | BeBaby, Amazon, EBAZAR |
-| `LIMPAR_DIVERG` | `true` | apaga a mensagem antiga. Requer a função da Parte 1.5 |
+| `LIMPAR_DIVERG` | **`false`** | apaga a mensagem antiga. Desligado — ver Parte 1.5 |
 
 ⚠️ **Confirme o `CODBAI_CENTRO` em produção.** O 866 foi definido em homologação:
 
@@ -408,8 +417,9 @@ própria integração em produção, tem `CEP` preenchido e `CODEND = 0`.
 
 ## Limitações conhecidas
 
-**A view mostra os últimos 90 dias, só `STATUS = 0`.** É ajuste de desempenho:
-sem filtro são 16.912 notas e a consulta não termina; com os dois, 508.
+**A view mostra os últimos 2 dias, só `STATUS = 0`.** É a lista de trabalho do dia, com
+cadastrados e não cadastrados. Ampliar a janela é uma linha no SQL — mas meça o tempo
+depois, porque o custo cresce rápido.
 
 **CEP geral de município não tem logradouro.** O ViaCEP devolve campos vazios (ex.:
 `87430000`, Tapejara/PR). Não é falha do serviço — nem a tela do Sankhya resolve esses.
@@ -459,10 +469,10 @@ mensagem, e as colunas se atualizam ao recarregar a grade.
 - [ ] Lançador criado, ordem dos campos definida
 - [ ] Painel de filtros configurado
 
-**Função de limpeza (se for usar)**
+**Função de limpeza — só se for usar (vem desligada)**
 - [ ] `STP_LIMPA_DIVERG_PARC` criada e `VALID`
 - [ ] Testada isolada, com um documento real
-- [ ] Confirmado que a divergência sobrevive ao processamento nesta base
+- [ ] `LIMPAR_DIVERG = true` no script
 
 **Botão**
 - [ ] `CODBAI_CENTRO` confirmado em produção
