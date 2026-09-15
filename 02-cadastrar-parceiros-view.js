@@ -52,8 +52,13 @@
 
 // ========================================================== INTERRUPTORES
 var MODO_SIMULACAO  = true;    // true = so relata, NAO grava
-var LIMPAR_DIVERG   = true;    // apos CADASTRAR com sucesso, remove do
-                               // TGFIXN.CONFIG a
+var LIMPAR_DIVERG   = false;   // DESLIGADO por decisao (12/09/2026):
+                               // quando a nota processa, o proprio motor
+                               // reescreve o CONFIG e o aviso some
+                               // sozinho. A limpeza so teria utilidade
+                               // para nota que nunca vai processar.
+                               //
+                               // Se ligar, remove do TGFIXN.CONFIG a
                                // mensagem "nao foi encontrado qualquer
                                // parceiro cliente ativo".
                                // REQUER a funcao STP_LIMPA_DIVERG_PARC
