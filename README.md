@@ -81,14 +81,16 @@ o bloco `<dest>` inteiro.
 
 ```sql
 WHERE X.STATUS = 0
-  AND X.DHIMPORT >= SYSDATE - 90
+  AND X.DHIMPORT >= SYSDATE - 2
   AND (X.NOMEARQUIVO LIKE '%2841455800%' OR X.CHAVEACESSO LIKE '______2841455800%')
 ```
 
 **`EXTRAIDO`** — tira do bloco `<dest>` o nome, documento, CEP, IBGE, município, UF,
 logradouro, número e bairro. E da chave, o CNPJ do emitente (posições 7–20).
 
-**`DOFULL`** — mantém só os dois CNPJs da BeBaby e traduz em `ORIGEM`:
+A janela de **2 dias** é deliberada: a view é a lista de trabalho do dia, não um histórico.
+
+**`DOFULL`** — mantém só os dois CNPJs da BeBaby e traduz o emitente em `ORIGEM`:
 
 | CNPJ do emitente | Origem |
 |---|---|
@@ -114,24 +116,46 @@ Depois, três `LEFT JOIN`: `TGFPAR` (o parceiro existe?), `TSICEP` (o CEP resolv
 **Por que duas colunas para a mesma informação:** filtro não funciona em coluna de HTML.
 A de texto puro serve para filtrar, a colorida para ler. As de texto ficam no fim da grade.
 
-O `CADASTRADO` tem quatro valores porque o motor exige "cliente **ativo**" — um parceiro
-que existe mas está com `CLIENTE = 'N'` não serve, e um SIM/NÃO esconderia esse caso.
+O `CADASTRADO` tem quatro valores porque o motor exige "cliente **ativo**": parceiro que
+existe mas está com `CLIENTE = 'N'` ou `ATIVO = 'N'` **não serve**, e um SIM/NÃO simples
+esconderia isso.
 
-### ⚠️ Os hints `/*+ MATERIALIZE */`
+A view traz **tudo** da janela — cadastrados e não cadastrados. Para ver só o que falta,
+filtre por `CADASTRADO <> 'SIM'` no painel.
 
-Três CTEs os têm, e **são essenciais**. Sem eles a consulta leva 30 segundos em vez de 1,5.
+### Desempenho
 
-O Oracle escolhia não materializar a CTE. No `GROUP BY` com nove `MIN()`, ele reavaliava
-toda a cadeia de extração do XML **uma vez por coluna agregada** — nove releituras do CLOB
-por nota.
+Duas coisas sustentam o tempo da view, e as duas foram medidas.
 
-Se a view ficar lenta, é a primeira coisa a conferir.
+**Os hints `/*+ MATERIALIZE */`** nas quatro CTEs. Sem eles o Oracle não guarda o resultado
+intermediário: no `GROUP BY` com nove `MIN()`, ele reavalia toda a cadeia de extração do
+XML **uma vez por coluna agregada** — nove releituras do CLOB por nota. Em homologação era
+a diferença entre 30s e 1,5s.
+
+**A janela de dias.** É o que controla o volume que chega à extração.
+
+Medições em produção, com 1.386 notas em 90 dias:
+
+| Versão | Tempo |
+|---|---|
+| 90 dias, sem filtro de pendentes | 63s |
+| + `MATERIALIZE` no `AGRUPADO` | 53s |
+| + janela de 30 dias | 44s |
+| + descarta quem já tem parceiro | 19s |
+| tudo junto, 30 dias | 12s |
+
+**A versão entregue usa janela de 2 dias e traz tudo.** O filtro de "descarta quem já tem
+parceiro" foi medido e é o que mais acelera — mas não está aplicado, porque faria a view
+mostrar só as pendências, e o objetivo é ver o dia inteiro. A janela curta cobre o
+desempenho.
+
+Se ficar lenta, confira os hints e reduza a janela de dias.
 
 ---
 
 ## `02` — O botão
 
-A�ão Script na instância da view. Processa as **linhas selecionadas** na grade.
+Ação Script na instância da view. Processa as **linhas selecionadas** na grade.
 
 ### Por que seleção obrigatória
 
@@ -266,7 +290,7 @@ configurações diferentes entre si.
 | `MODO_SIMULACAO` | `true` | só relata, não grava. **Comece assim** |
 | `USAR_TSICEP` | `true` | nível 1 do endereço |
 | `USAR_VIACEP` | `true` | nível 2. **Cria registros** em `TSIEND`, `TSIBAI`, `TSICEP` |
-| `LIMPAR_DIVERG` | `true` | apaga a mensagem. Requer a função do arquivo `04` |
+| `LIMPAR_DIVERG` | **`false`** | apaga a mensagem. Desligado — ver abaixo |
 | `CODBAI_CENTRO` | `866` | `CODBAI` genérico de "CENTRO" |
 | `MAX_LINHAS` | `10` | teto por clique |
 | `TENTATIVAS_PK` | `3` | retentativas se o `CODPARC` colidir |
@@ -298,8 +322,19 @@ A view é somente leitura, então o resultado vem pela mensagem. As colunas `CAD
 ## `04` — A função de limpeza
 
 A mensagem de divergência fica gravada na coluna `CONFIG` da `TGFIXN` desde o momento do
-upload, e **não é reavaliada**. Cadastrar o parceiro faz a nota processar, mas o texto
-continua aparecendo no Portal.
+upload, e não é reavaliada enquanto a nota não processa.
+
+### ⚠️ Vem desligada
+
+`LIMPAR_DIVERG = false` por decisão de 12/09/2026: **quando a nota processa, o próprio
+motor reescreve o `CONFIG` e o aviso some**. A limpeza só teria utilidade para nota que
+nunca vai processar.
+
+A função continua no repositório porque é útil em dois casos: limpar ruído acumulado de
+notas antigas que não vão processar, e diagnosticar. Para ligar, basta
+`LIMPAR_DIVERG = true` e criar a função no banco.
+
+O que está abaixo descreve o funcionamento dela.
 
 ### Por que é função, e não `UPDATE` no script
 
@@ -380,8 +415,8 @@ ViaCEP mora no script, não numa procedure.
 
 ## Limitações
 
-- A view cobre os **últimos 90 dias**, só `STATUS = 0` — é ajuste de desempenho: sem
-  filtro são 16.912 notas e a consulta não termina
+- A view cobre os **últimos 2 dias**, só `STATUS = 0`. É a lista de trabalho do dia — para
+  pendência antiga, altere `DHIMPORT` e meça o tempo depois
 - **CEP geral de município não tem logradouro.** O ViaCEP devolve campos vazios (ex.:
   `87430000`, Tapejara/PR). Não é falha do serviço — nem a tela do Sankhya resolve esses
 - **Nota importada por robô não tem `CONFIG`**: a divergência só é gravada quando o XML
