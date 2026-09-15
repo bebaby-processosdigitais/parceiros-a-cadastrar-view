@@ -181,8 +181,11 @@ do XML.**
 `<validacoes><divDevolucao>`, desde o momento do upload. **Não é reavaliada** — cadastrar
 o parceiro não limpa o texto, embora a nota passe a processar.
 
-Resolvido com a função `STP_LIMPA_DIVERG_PARC` (arquivo `04`), que o botão chama depois de
-confirmar o cadastro. Ela remove **só a frase** do parceiro, não o bloco — porque o mesmo
+**Quando a nota processa, o motor reescreve o `CONFIG` e o aviso some sozinho** (info da
+equipe, 12/09/2026). Por isso o botão vem com `LIMPAR_DIVERG = false`.
+
+A função `STP_LIMPA_DIVERG_PARC` (arquivo `04`) existe e funciona, mas só é útil para nota
+que nunca vai processar. Ela remove **só a frase** do parceiro, não o bloco — porque o mesmo
 `<divDevolucao>` pode conter outras validações (a nota 109154 tem "Tipo de Operação não
 informado" junto).
 
@@ -324,7 +327,7 @@ para achar.
 | # | Pendência | Com quem |
 |---|---|---|
 | 1 | Update de estrutura na homologação (4 colunas conhecidas faltando) | Paulo |
-| 2 | O `CONFIG` é reescrito quando a nota processa com sucesso? | verificável por SQL em produção. Se sim, a função `04` é desnecessária lá |
+| 2 | ~~O `CONFIG` é reescrito quando a nota processa?~~ | ✅ **Sim** — confirmado 12/09. A função `04` fica desligada |
 | 3 | Confirmar que o `CODBAI 866` é genérico em produção | query no `03-verificacao.sql` |
 | 4 | Testar contraparte pessoa jurídica de verdade | — |
 | 5 | Corrigir o `CODPARC 58783` (Amazon cadastrada por engano, em homologação) | — |
