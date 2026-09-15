@@ -3,8 +3,15 @@
 -- Lista de PARCEIROS a cadastrar a partir das notas do Portal de
 -- Importacao de XML. Uma linha por documento (CNPJ/CPF), nao por nota.
 --
--- Escopo: apenas ML FULL (empresa 1) e AMAZON FULL (empresa 2),
--- notas PENDENTES (STATUS = 0) dos ultimos 90 dias.
+-- Escopo: apenas ML FULL (empresa 1) e AMAZON FULL (empresa 2), notas
+-- PENDENTES (STATUS = 0) dos ultimos 2 DIAS.
+--
+-- A view traz TUDO da janela -- cadastrados e nao cadastrados. A coluna
+-- CADASTRADO distingue os dois.
+--
+-- A janela curta e deliberada: a view e a lista de trabalho do dia, nao
+-- um historico. Para ver pendencia antiga, altere DHIMPORT abaixo -- mas
+-- meça o tempo depois, porque o custo cresce rapido com o volume.
 --
 -- POR QUE TUDO SAI DO XML:
 -- Nas notas subidas manualmente pelo Portal, as colunas CHAVEACESSO,
@@ -95,7 +102,7 @@ WITH NOTAS AS (
                                                                   AS BLOCO_DEST
     FROM TGFIXN X
     WHERE X.STATUS = 0
-      AND X.DHIMPORT >= SYSDATE - 90
+      AND X.DHIMPORT >= SYSDATE - 2
       -- Descarta o que nao e do Full ANTES do regex. O NOMEARQUIVO traz
       -- a chave nas notas manuais; a CHAVEACESSO, nas que a integracao
       -- preencheu. Corta ~23% sem custo (medido: 515 -> 395).
@@ -173,7 +180,8 @@ DOFULL AS (
 AGRUPADO AS (
     -- Uma linha por documento. O operador cadastra 1 parceiro, nao
     -- percorre N notas do mesmo cliente.
-    SELECT DOC_DEST,
+    SELECT /*+ MATERIALIZE */
+           DOC_DEST,
            MIN(NUARQUIVO)  AS NUARQUIVO,      -- PK da view
            MIN(DHIMPORT)   AS DHIMPORT,       -- primeira aparicao
            MAX(DHIMPORT)   AS DHIMPORT_ULT,
