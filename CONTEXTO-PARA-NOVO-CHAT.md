@@ -280,6 +280,8 @@ Sair e entrar no sistema resolve. (Cheguei a documentar como proibição; estava
 | `[object Object]` na mensagem | variável recebendo estrutura em vez de valor |
 | `ORA-00936: expressão não encontrada` | vírgula órfã antes do `FROM` |
 | `X is not defined` | quase sempre versão antiga colada na ação |
+| Nota some da view sem erro | versão antiga da view no banco. O filtro `CHAVEACESSO LIKE '______2841455800%'` precisa de **seis** underscores (cUF + AAMM antes do CNPJ); com quatro, some silenciosamente o que vem de upload manual |
+| "Selecione as notas..." com linha selecionada | falta permissão nos **campos**: o `getCampo()` falha e a lista fica vazia. São três níveis de acesso — tela, ação e campos (PERMITIDO + REPASSAR) |
 
 ---
 
