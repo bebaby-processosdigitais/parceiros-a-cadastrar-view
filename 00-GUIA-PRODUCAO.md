@@ -137,6 +137,27 @@ Tem que vir `VIEW`. **A tabela deixa de existir** — nada fica armazenado.
 **e)** No banco, rode `01-view-parceiros-xml.sql` **inteiro**, com o
 `CREATE OR REPLACE VIEW`. Isso troca o esqueleto pela consulta real.
 
+⚠️ **Use F5 (Run Script), não Ctrl+Enter.** Comando longo de várias linhas pode executar
+parcial no SQL Developer, e o `CREATE OR REPLACE` não avisa que ficou pela metade.
+
+⚠️ **Confira depois de recriar.** Em 16/09/2026 a view em produção estava com uma versão
+antiga do filtro de CNPJ (quatro underscores em vez de seis) e ninguém notou: ela não dava
+erro, só deixava de mostrar as notas cujo `NOMEARQUIVO` não contém o CNPJ — justamente as
+de upload manual, que são o caso de uso da tela. Eram 182 notas elegíveis e 43 na tela.
+
+```sql
+SELECT COUNT(*) FROM AD_VWPARCXML;
+
+-- compare com o que deveria entrar
+SELECT COUNT(*) FROM TGFIXN
+WHERE STATUS = 0 AND DHIMPORT >= SYSDATE - 30
+  AND (NOMEARQUIVO LIKE '%2841455800%' OR CHAVEACESSO LIKE '______2841455800%')
+  AND INSTR(XML, '</dest>') > INSTR(XML, '<dest>');
+```
+
+O segundo é maior que o primeiro (a view agrupa por documento), mas uma diferença grande
+demais é sinal de versão errada no banco.
+
 Confirme que as colunas batem com os campos criados:
 
 ```sql
@@ -473,6 +494,12 @@ mensagem, e as colunas se atualizam ao recarregar a grade.
 - [ ] `STP_LIMPA_DIVERG_PARC` criada e `VALID`
 - [ ] Testada isolada, com um documento real
 - [ ] `LIMPAR_DIVERG = true` no script
+
+**Liberar para os usuários**
+- [ ] Acesso à tela `AD_VWPARCXML` em Controle de Acesso > Acessos
+- [ ] Acesso à ação "Cadastrar Parceiros" (foi criada com Controla Acesso ligado)
+- [ ] **Acesso aos campos**, marcando PERMITIDO e REPASSAR
+- [ ] Testado com o usuário final, não com o de administrador
 
 **Botão**
 - [ ] `CODBAI_CENTRO` confirmado em produção
