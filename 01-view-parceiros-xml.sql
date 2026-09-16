@@ -4,14 +4,20 @@
 -- Importacao de XML. Uma linha por documento (CNPJ/CPF), nao por nota.
 --
 -- Escopo: apenas ML FULL (empresa 1) e AMAZON FULL (empresa 2), notas
--- PENDENTES (STATUS = 0) dos ultimos 2 DIAS.
+-- PENDENTES (STATUS = 0) dos ultimos 30 DIAS.
 --
 -- A view traz TUDO da janela -- cadastrados e nao cadastrados. A coluna
 -- CADASTRADO distingue os dois.
 --
--- A janela curta e deliberada: a view e a lista de trabalho do dia, nao
--- um historico. Para ver pendencia antiga, altere DHIMPORT abaixo -- mas
--- meça o tempo depois, porque o custo cresce rapido com o volume.
+-- A janela era de 2 dias e foi ampliada para 30 em 16/09/2026: com os
+-- hints MATERIALIZE, o tempo ficou aceitavel fora do DBExplorer. Se
+-- alterar, meça o tempo depois -- o custo cresce rapido com o volume.
+--
+-- ATENCAO ao filtro de CNPJ mais abaixo: sao SEIS underscores em
+-- '______2841455800%', porque a chave de acesso comeca com cUF(2) +
+-- AAMM(4) antes do CNPJ. Com quatro, o LIKE nunca casa e a view deixa de
+-- mostrar as notas cujo NOMEARQUIVO nao contem o CNPJ -- silenciosamente.
+-- Foi o que aconteceu em 16/09/2026: 182 notas elegiveis, so 43 na tela.
 --
 -- POR QUE TUDO SAI DO XML:
 -- Nas notas subidas manualmente pelo Portal, as colunas CHAVEACESSO,
@@ -102,7 +108,7 @@ WITH NOTAS AS (
                                                                   AS BLOCO_DEST
     FROM TGFIXN X
     WHERE X.STATUS = 0
-      AND X.DHIMPORT >= SYSDATE - 2
+      AND X.DHIMPORT >= SYSDATE - 30
       -- Descarta o que nao e do Full ANTES do regex. O NOMEARQUIVO traz
       -- a chave nas notas manuais; a CHAVEACESSO, nas que a integracao
       -- preencheu. Corta ~23% sem custo (medido: 515 -> 395).
