@@ -150,8 +150,8 @@ SELECT COUNT(*) FROM AD_VWPARCXML;
 
 -- compare com o que deveria entrar
 SELECT COUNT(*) FROM TGFIXN
-WHERE STATUS = 0 AND DHIMPORT >= SYSDATE - 30
-  AND (NOMEARQUIVO LIKE '%2841455800%' OR CHAVEACESSO LIKE '______2841455800%')
+WHERE STATUS IN (0, 4) AND DHIMPORT >= SYSDATE - 30
+  AND (NOMEARQUIVO LIKE '%2841455800%' OR SUBSTR(CHAVEACESSO, 7, 10) = '2841455800')
   AND INSTR(XML, '</dest>') > INSTR(XML, '<dest>');
 ```
 
@@ -438,9 +438,17 @@ própria integração em produção, tem `CEP` preenchido e `CODEND = 0`.
 
 ## Limitações conhecidas
 
-**A view mostra os últimos 2 dias, só `STATUS = 0`.** É a lista de trabalho do dia, com
-cadastrados e não cadastrados. Ampliar a janela é uma linha no SQL — mas meça o tempo
-depois, porque o custo cresce rápido.
+**A view mostra os últimos 30 dias, com `STATUS` 0 ou 4.** Traz cadastrados e não
+cadastrados; a coluna `CADASTRADO` distingue.
+
+⚠️ **O status em que a divergência chega já mudou uma vez.** Até 23/09/2026 era `0`; em
+24/09 passou a `4`, e a mensagem migrou da tag `<divDevolucao>` para `<EmpParcTransp>`.
+Depois de qualquer atualização do Sankhya, rode a consulta de status do
+`03-verificacao.sql`.
+
+⚠️ **O `STATUS = 3` está em aberto**: 124 notas em 30 dias, todas sem parceiro, com
+`CONFIG`, `DETALHESIMPORTACAO`, `CODPARC` e `NUNOTA` vazios. Não foi incluído porque não se
+sabe o que significa. O nome aparece na lista do filtro "Status" na tela do Portal.
 
 **CEP geral de município não tem logradouro.** O ViaCEP devolve campos vazios (ex.:
 `87430000`, Tapejara/PR). Não é falha do serviço — nem a tela do Sankhya resolve esses.
