@@ -177,8 +177,16 @@ procedure PL/SQL não é opção** para consultar CEP.
 `CODEMP`, `CODTIPOPER` — o Portal grava apenas `XML` e `NOMEARQUIVO`. **Tudo tem que sair
 do XML.**
 
-**A mensagem de divergência fica gravada na coluna `CONFIG`**, dentro de
-`<validacoes><divDevolucao>`, desde o momento do upload. **Não é reavaliada** — cadastrar
+**A mensagem de divergência fica gravada na coluna `CONFIG`** desde o momento do upload.
+
+⚠️ **O formato mudou em 24/09/2026.** Antes: `STATUS = 0` e tag `<divDevolucao>`. Agora:
+`STATUS = 4` e tag `<EmpParcTransp>`. A view foi ajustada para `STATUS IN (0, 4)`; a função
+de limpeza (arquivo `04`) ainda trata só o formato antigo — está desligada, então não
+afeta nada.
+
+⚠️ **O `STATUS = 3` é desconhecido**: 124 notas em 30 dias, todas sem parceiro, e sem nada
+em `CONFIG`, `DETALHESIMPORTACAO`, `CODPARC` ou `NUNOTA`. Pode ser mais um estado de
+pendência que precisa entrar na view. O nome está na lista do filtro "Status" do Portal. **Não é reavaliada** — cadastrar
 o parceiro não limpa o texto, embora a nota passe a processar.
 
 **Quando a nota processa, o motor reescreve o `CONFIG` e o aviso some sozinho** (info da
@@ -280,7 +288,8 @@ Sair e entrar no sistema resolve. (Cheguei a documentar como proibição; estava
 | `[object Object]` na mensagem | variável recebendo estrutura em vez de valor |
 | `ORA-00936: expressão não encontrada` | vírgula órfã antes do `FROM` |
 | `X is not defined` | quase sempre versão antiga colada na ação |
-| Nota some da view sem erro | versão antiga da view no banco. O filtro `CHAVEACESSO LIKE '______2841455800%'` precisa de **seis** underscores (cUF + AAMM antes do CNPJ); com quatro, some silenciosamente o que vem de upload manual |
+| Nota some da view sem erro | (a) o status mudou — conferir se há status fora de `(0, 4)` com notas sem parceiro; (b) a definição no banco divergiu do arquivo |
+| Filtro de CNPJ deixou de casar | a versão com `LIKE` e underscores se corrompia na cópia (underscore repetido é sintaxe de ênfase). Hoje é `SUBSTR(CHAVEACESSO, 7, 10) = '2841455800'`. **Não voltar para `LIKE`** |
 | "Selecione as notas..." com linha selecionada | falta permissão nos **campos**: o `getCampo()` falha e a lista fica vazia. São três níveis de acesso — tela, ação e campos (PERMITIDO + REPASSAR) |
 
 ---
