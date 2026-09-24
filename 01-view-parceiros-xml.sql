@@ -4,7 +4,27 @@
 -- Importacao de XML. Uma linha por documento (CNPJ/CPF), nao por nota.
 --
 -- Escopo: apenas ML FULL (empresa 1) e AMAZON FULL (empresa 2), notas
--- PENDENTES (STATUS = 0) dos ultimos 30 DIAS.
+-- PENDENTES (STATUS 0 ou 4) dos ultimos 30 DIAS.
+--
+-- O STATUS 4 foi incluido em 24/09/2026. As notas com a divergencia de
+-- parceiro passaram a entrar com ele em vez de 0, e a mensagem mudou de
+-- tag: agora vem em <EmpParcTransp> e nao em <divDevolucao>. Exemplo, a
+-- nota 120191:
+--
+--   <validacoes>
+--     <EmpParcTransp>
+--       <msg>-Nao foi encontrado qualquer parceiro cliente ativo
+--            com o CNPJ/CPF 36256153049.</msg>
+--     </EmpParcTransp>
+--   </validacoes>
+--
+-- Provavel atualizacao do Sankhya, ou variacao por tipo de nota -- as de
+-- agosto, com STATUS 0, usavam <divDevolucao>.
+--
+-- ATENCAO: existe tambem o STATUS 3 (124 notas em 30 dias, TODAS sem
+-- parceiro), com CONFIG, DETALHESIMPORTACAO, CODPARC e NUNOTA vazios.
+-- Nao foi incluido porque nao se sabe o que significa. Se for outro
+-- estado de pendencia, vale acrescentar aqui.
 --
 -- A view traz TUDO da janela -- cadastrados e nao cadastrados. A coluna
 -- CADASTRADO distingue os dois.
@@ -13,11 +33,23 @@
 -- hints MATERIALIZE, o tempo ficou aceitavel fora do DBExplorer. Se
 -- alterar, meça o tempo depois -- o custo cresce rapido com o volume.
 --
--- ATENCAO ao filtro de CNPJ mais abaixo: sao SEIS underscores em
--- '______2841455800%', porque a chave de acesso comeca com cUF(2) +
--- AAMM(4) antes do CNPJ. Com quatro, o LIKE nunca casa e a view deixa de
--- mostrar as notas cujo NOMEARQUIVO nao contem o CNPJ -- silenciosamente.
--- Foi o que aconteceu em 16/09/2026: 182 notas elegiveis, so 43 na tela.
+-- HISTORICO -- POR QUE O FILTRO DE CNPJ USA SUBSTR E NAO LIKE
+--
+-- A versao original usava LIKE com seis underscores, porque a chave de
+-- acesso comeca com cUF(2) + AAMM(4) antes do CNPJ. O problema: em algum
+-- ponto do caminho entre o arquivo e o banco, underscores repetidos eram
+-- COLAPSADOS -- provavelmente pelo editor ou pelo clipboard, ja que "_"
+-- repetido e sintaxe de enfase em varios formatos.
+--
+-- Com quatro underscores o LIKE nunca casa, e a view deixa de mostrar as
+-- notas cujo NOMEARQUIVO nao contem o CNPJ -- ou seja, justamente as de
+-- upload manual, que sao o caso de uso da tela. E nao da erro nenhum.
+--
+-- Aconteceu duas vezes: 16/09/2026 (182 notas elegiveis, 43 na tela) e de
+-- novo em 23/09/2026.
+--
+-- SUBSTR(CHAVEACESSO, 7, 10) = '2841455800' faz o mesmo e nao tem
+-- caractere repetido para se perder na copia. NAO voltar para LIKE.
 --
 -- POR QUE TUDO SAI DO XML:
 -- Nas notas subidas manualmente pelo Portal, as colunas CHAVEACESSO,
@@ -107,13 +139,13 @@ WITH NOTAS AS (
                    INSTR(X.XML, '</dest>') - INSTR(X.XML, '<dest>') + 7))
                                                                   AS BLOCO_DEST
     FROM TGFIXN X
-    WHERE X.STATUS = 0
+    WHERE X.STATUS IN (0, 4)
       AND X.DHIMPORT >= SYSDATE - 30
       -- Descarta o que nao e do Full ANTES do regex. O NOMEARQUIVO traz
       -- a chave nas notas manuais; a CHAVEACESSO, nas que a integracao
       -- preencheu. Corta ~23% sem custo (medido: 515 -> 395).
       AND (X.NOMEARQUIVO LIKE '%2841455800%'
-        OR X.CHAVEACESSO LIKE '______2841455800%')
+        OR SUBSTR(X.CHAVEACESSO, 7, 10) = '2841455800')
       AND INSTR(X.XML, '</dest>') > INSTR(X.XML, '<dest>')
 ),
 EXTRAIDO AS (
