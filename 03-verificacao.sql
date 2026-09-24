@@ -14,6 +14,44 @@ FROM DUAL;
 
 
 -- ---------------------------------------------------------------------
+-- QUE STATUS EXISTEM E O QUE SIGNIFICAM
+--
+-- A view pega STATUS 0 e 4. Rode isto depois de qualquer atualizacao do
+-- Sankhya: o status em que a divergencia de parceiro chega JA MUDOU uma
+-- vez (era 0, passou a 4 em 24/09/2026).
+--
+-- Observado em 24/09/2026, ultimos 30 dias:
+--   0 = 814 notas, 280 sem parceiro  -> pendente
+--   2 = 214 notas,   0 sem parceiro
+--   3 = 124 notas, 124 sem parceiro  -> SIGNIFICADO DESCONHECIDO
+--   4 =  41 notas,   9 sem parceiro  -> pendente com divergencia
+--   5 = 2.249 notas, 0 sem parceiro  -> processada
+--
+-- O STATUS 3 vem com CONFIG, DETALHESIMPORTACAO, CODPARC e NUNOTA todos
+-- VAZIOS -- nao da para inferir o que e. O nome aparece na lista do
+-- filtro "Status" na tela do Portal. Se for outro estado de pendencia,
+-- precisa entrar na view.
+-- ---------------------------------------------------------------------
+SELECT STATUS, COUNT(*) AS QTD,
+       SUM(CASE WHEN CODPARC IS NULL THEN 1 ELSE 0 END) AS SEM_PARCEIRO,
+       MIN(DHIMPORT) AS DE, MAX(DHIMPORT) AS ATE
+FROM TGFIXN
+WHERE DHIMPORT >= SYSDATE - 30
+GROUP BY STATUS ORDER BY STATUS;
+
+-- Onde a divergencia de parceiro esta gravada, por status.
+-- A tag mudou: era <divDevolucao>, passou a <EmpParcTransp>.
+SELECT STATUS,
+       COUNT(*) AS QTD,
+       SUM(CASE WHEN INSTR(CONFIG, 'divDevolucao')  > 0 THEN 1 ELSE 0 END) AS TAG_ANTIGA,
+       SUM(CASE WHEN INSTR(CONFIG, 'EmpParcTransp') > 0 THEN 1 ELSE 0 END) AS TAG_NOVA,
+       SUM(CASE WHEN CONFIG IS NULL THEN 1 ELSE 0 END)                     AS SEM_CONFIG
+FROM TGFIXN
+WHERE DHIMPORT >= SYSDATE - 30
+GROUP BY STATUS ORDER BY STATUS;
+
+
+-- ---------------------------------------------------------------------
 -- A VIEW ESTA SAUDAVEL?
 -- Tempo esperado: poucos segundos. Se passar de 30s, conferir os hints
 -- /*+ MATERIALIZE */ nas CTEs.
@@ -88,6 +126,29 @@ FROM TGFPAR
 WHERE CGC_CPF IS NOT NULL AND DTCAD >= SYSDATE - 30
 GROUP BY CGC_CPF
 HAVING COUNT(*) > 1;
+
+
+-- ---------------------------------------------------------------------
+-- POR QUE ESTA NOTA NAO APARECE NA VIEW?
+--
+-- Trocar o NUARQUIVO. Cada coluna corresponde a uma condicao da view:
+--   STATUS       -> tem que ser 0 ou 4
+--   DIAS         -> tem que ser <= 30
+--   POR_NOME ou POR_CHAVE -> pelo menos um 'S'
+--   TEM_DEST     -> 'S'
+--   CNPJ_EMIT    -> 28414558000132 ou 28414558000213
+--
+-- Se tudo passar e a nota ainda nao aparecer, lembre que a view AGRUPA
+-- POR DOCUMENTO: o NUARQUIVO exibido e o da nota MAIS ANTIGA daquele
+-- cliente. Busque por DOCUMENTO, nao por NUARQUIVO.
+-- ---------------------------------------------------------------------
+SELECT NUARQUIVO, NUMNOTA, NOMEARQUIVO, STATUS, DHIMPORT, CODPARC,
+       ROUND(SYSDATE - DHIMPORT, 2) AS DIAS,
+       CASE WHEN NOMEARQUIVO LIKE '%2841455800%' THEN 'S' ELSE 'N' END AS POR_NOME,
+       CASE WHEN SUBSTR(CHAVEACESSO, 7, 10) = '2841455800' THEN 'S' ELSE 'N' END AS POR_CHAVE,
+       CASE WHEN INSTR(XML, '</dest>') > INSTR(XML, '<dest>') THEN 'S' ELSE 'N' END AS TEM_DEST,
+       SUBSTR(TO_CHAR(SUBSTR(XML, INSTR(XML,'<chNFe>') + 7, 44)), 7, 14) AS CNPJ_EMIT
+FROM TGFIXN WHERE NUARQUIVO = 0;
 
 
 -- ---------------------------------------------------------------------
