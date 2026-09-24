@@ -54,6 +54,32 @@
 -- da frase.
 -- =====================================================================
 
+-- =====================================================================
+-- ⚠️ DESATUALIZADA -- LER ANTES DE USAR (24/09/2026)
+--
+-- Esta funcao foi escrita quando a divergencia chegava com STATUS = 0 e
+-- dentro da tag <divDevolucao>. Duas coisas mudaram:
+--
+--   STATUS: agora chega com 4 (a view ja foi ajustada para 0 e 4)
+--   TAG:    agora e <EmpParcTransp>, nao <divDevolucao>
+--
+-- Exemplo do formato novo, nota 120191:
+--   <validacoes>
+--     <EmpParcTransp>
+--       <msg>-Nao foi encontrado qualquer parceiro cliente ativo
+--            com o CNPJ/CPF 36256153049.</msg>
+--     </EmpParcTransp>
+--   </validacoes>
+--
+-- Para religar a funcao seria preciso:
+--   1. trocar STATUS = 0 por STATUS IN (0, 4) no cursor
+--   2. tratar as DUAS tags (notas antigas ainda tem <divDevolucao>)
+--   3. testar de novo contra os formatos que existem na base
+--
+-- Como o botao vem com LIMPAR_DIVERG = false -- o motor reescreve o
+-- CONFIG ao processar e o aviso some sozinho --, isso nao foi feito.
+-- =====================================================================
+
 CREATE OR REPLACE FUNCTION STP_LIMPA_DIVERG_PARC (P_DOCUMENTO IN VARCHAR2)
 RETURN NUMBER
 IS
