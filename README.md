@@ -80,15 +80,24 @@ Quatro etapas encadeadas (CTEs):
 o bloco `<dest>` inteiro.
 
 ```sql
-WHERE X.STATUS = 0
-  AND X.DHIMPORT >= SYSDATE - 2
-  AND (X.NOMEARQUIVO LIKE '%2841455800%' OR X.CHAVEACESSO LIKE '______2841455800%')
+WHERE X.STATUS IN (0, 4)
+  AND X.DHIMPORT >= SYSDATE - 30
+  AND (X.NOMEARQUIVO LIKE '%2841455800%' OR SUBSTR(X.CHAVEACESSO, 7, 10) = '2841455800')
 ```
 
 **`EXTRAIDO`** — tira do bloco `<dest>` o nome, documento, CEP, IBGE, município, UF,
 logradouro, número e bairro. E da chave, o CNPJ do emitente (posições 7–20).
 
-A janela de **2 dias** é deliberada: a view é a lista de trabalho do dia, não um histórico.
+Dois detalhes que já causaram a view parar de mostrar notas:
+
+**`STATUS IN (0, 4)`** — até 23/09/2026 a divergência de parceiro chegava com status `0`;
+em 24/09 passou a `4`, e a mensagem migrou da tag `<divDevolucao>` para `<EmpParcTransp>`.
+Depois de atualização do Sankhya, vale conferir se apareceu status novo.
+
+**`SUBSTR` em vez de `LIKE`** no filtro de CNPJ — a versão original usava underscores para
+pular o `cUF(2) + AAMM(4)` da chave, e eles se perdiam na cópia entre o arquivo e o banco
+(underscore repetido é sintaxe de ênfase em vários formatos). Aconteceu duas vezes.
+**Não voltar para `LIKE`.**
 
 **`DOFULL`** — mantém só os dois CNPJs da BeBaby e traduz o emitente em `ORIGEM`:
 
@@ -415,8 +424,10 @@ ViaCEP mora no script, não numa procedure.
 
 ## Limitações
 
-- A view cobre os **últimos 2 dias**, só `STATUS = 0`. É a lista de trabalho do dia — para
-  pendência antiga, altere `DHIMPORT` e meça o tempo depois
+- A view cobre os **últimos 30 dias**, com `STATUS` 0 ou 4
+- **O `STATUS = 3` está em aberto**: 124 notas em 30 dias, todas sem parceiro, e sem nada
+  em `CONFIG`, `DETALHESIMPORTACAO`, `CODPARC` ou `NUNOTA`. Não se sabe o que significa — o
+  nome está na lista do filtro "Status" do Portal
 - **CEP geral de município não tem logradouro.** O ViaCEP devolve campos vazios (ex.:
   `87430000`, Tapejara/PR). Não é falha do serviço — nem a tela do Sankhya resolve esses
 - **Nota importada por robô não tem `CONFIG`**: a divergência só é gravada quando o XML
@@ -453,6 +464,14 @@ Se não retornar, a função não existe — a chamada falha em silêncio.
 
 **Erro `X is not defined` no script?** Quase sempre é versão antiga colada na ação. Busque
 no editor por uma constante recente, como `NAO_CADASTRAR`.
+
+**A view parou de mostrar notas novas?** Dois suspeitos, nesta ordem: o status mudou (rode
+a consulta de status do `03-verificacao.sql`), ou a definição no banco divergiu do arquivo.
+
+**O botão diz "selecione as notas" mesmo com linha selecionada?** Falta permissão nos
+campos. O script lê o `NUARQUIVO` com `getCampo()`; sem acesso ao campo a leitura falha e
+a lista fica vazia. Em Controle de Acesso → Acessos, marque os campos da tela como
+PERMITIDO e REPASSAR. São três níveis de liberação — tela, ação e campos.
 
 O arquivo `03-verificacao.sql` tem o conjunto completo de consultas.
 
